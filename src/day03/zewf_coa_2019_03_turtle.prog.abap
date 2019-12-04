@@ -84,7 +84,7 @@ CLASS aoc IMPLEMENTATION.
 
   METHOD constructor.
 
-    turtle = zcl_turtle=>new(  ).
+    turtle = zcl_turtle=>new( title = 'Advent Of Code 2019 - Day 3' ).
     turtle->set_pen( pen = VALUE #( stroke_width = 2 ) ).
 
   ENDMETHOD.

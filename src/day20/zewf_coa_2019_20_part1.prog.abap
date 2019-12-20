@@ -19,10 +19,14 @@ CLASS solver DEFINITION CREATE PUBLIC FRIENDS unit_test.
            END OF _coordinate,
            BEGIN OF _portal_entry,
              id  TYPE _portal_id,
-             in  TYPE _coordinate,
-             out TYPE _coordinate,
+             ty  TYPE c LENGTH 1,
+             co1 TYPE _coordinate,
+             co2 TYPE _coordinate,
            END OF _portal_entry,
-           _portals TYPE SORTED TABLE OF _portal_entry WITH UNIQUE KEY id.
+           _portals TYPE SORTED TABLE OF _portal_entry
+                          WITH UNIQUE KEY id ty
+                          WITH NON-UNIQUE SORTED KEY coordinate1 COMPONENTS co1
+                          WITH NON-UNIQUE SORTED KEY coordinate2 COMPONENTS co2.
 
 
     METHODS set_maze
@@ -80,9 +84,47 @@ CLASS helper IMPLEMENTATION.
      ( row = `FG..#########.....#  ` )
      ( row = `  ###########.#####  ` )
      ( row = `             Z       ` )
-     ( row = `             Z       ` )
-   )
-   ).
+     ( row = `             Z       ` ) )
+
+     WHEN 2 THEN VALUE #(
+     ( row = `                   A                ` )
+     ( row = `                   A                ` )
+     ( row = `  #################.#############   ` )
+     ( row = `  #.#...#...................#.#.#   ` )
+     ( row = `  #.#.#.###.###.###.#########.#.#   ` )
+     ( row = `  #.#.#.......#...#.....#.#.#...#   ` )
+     ( row = `  #.#########.###.#####.#.#.###.#   ` )
+     ( row = `  #.............#.#.....#.......#   ` )
+     ( row = `  ###.###########.###.#####.#.#.#   ` )
+     ( row = `  #.....#        A   C    #.#.#.#   ` )
+     ( row = `  #######        S   P    #####.#   ` )
+     ( row = `  #.#...#                 #......VT ` )
+     ( row = `  #.#.#.#                 #.#####   ` )
+     ( row = `  #...#.#               YN....#.#   ` )
+     ( row = `  #.###.#                 #####.#   ` )
+     ( row = `DI....#.#                 #.....#   ` )
+     ( row = `  #####.#                 #.###.#   ` )
+     ( row = `ZZ......#               QG....#..AS ` )
+     ( row = `  ###.###                 #######   ` )
+     ( row = `JO..#.#.#                 #.....#   ` )
+     ( row = `  #.#.#.#                 ###.#.#   ` )
+     ( row = `  #...#..DI             BU....#..LF ` )
+     ( row = `  #####.#                 #.#####   ` )
+     ( row = `YN......#               VT..#....QG ` )
+     ( row = `  #.###.#                 #.###.#   ` )
+     ( row = `  #.#...#                 #.....#   ` )
+     ( row = `  ###.###    J L     J    #.#.###   ` )
+     ( row = `  #.....#    O F     P    #.#...#   ` )
+     ( row = `  #.###.#####.#.#####.#####.###.#   ` )
+     ( row = `  #...#.#.#...#.....#.....#.#...#   ` )
+     ( row = `  #.#####.###.###.#.#.#########.#   ` )
+     ( row = `  #...#.#.....#...#.#.#.#.....#.#   ` )
+     ( row = `  #.###.#####.###.###.#.#.#######   ` )
+     ( row = `  #.#.........#...#.............#   ` )
+     ( row = `  #########.###.###.#############   ` )
+     ( row = `           B   J   C                ` )
+     ( row = `           U   P   P                ` )  )
+    ).
   ENDMETHOD.
 ENDCLASS.
 
@@ -117,6 +159,10 @@ CLASS solver IMPLEMENTATION.
 
     DATA item1 TYPE c LENGTH 1.
     DATA item2 TYPE c LENGTH 1.
+
+    DATA coor1 TYPE _coordinate.
+    DATA coor2 TYPE _coordinate.
+
     DATA offset TYPE i.
     DATA line TYPE i.
     DATA portal_id TYPE _portal_id.
@@ -135,6 +181,8 @@ CLASS solver IMPLEMENTATION.
         CHECK sy-subrc > 0.
         item1 = substring( val = row-row off = offset len = 1 ).
         IF item1 CA sy-abcde.
+          coor1-x = offset.
+          coor1-y = line.
           item2 = get_item( x = offset + 1 y = line ).
           IF item2 CA sy-abcde.
             DATA(item_chk) = get_item( x = offset + 2 y = line ).
@@ -143,13 +191,27 @@ CLASS solver IMPLEMENTATION.
             IF item2 CA sy-abcde.
               item_chk = get_item( x = offset  y = line + 1 ).
             ELSE.
+              ADD 1 TO offset.
               CONTINUE.
             ENDIF.
           ENDIF.
           portal_id = item1 && item2 .
-          READ TABLE portals WITH TABLE KEY id = portal_id TRANSPORTING NO FIELDS.
+          READ TABLE portals
+          WITH TABLE KEY
+            id = portal_id
+            ty  = 'I'
+          TRANSPORTING NO FIELDS.
           IF sy-subrc > 0.
-            INSERT VALUE #( id = portal_id ) INTO TABLE portals.
+            INSERT VALUE #( id = portal_id ty = 'I' co1 = coor1 ) INTO TABLE portals.
+          ELSE.
+            READ TABLE portals
+            WITH TABLE KEY
+              id = portal_id
+              ty  = 'O'
+            TRANSPORTING NO FIELDS.
+            IF sy-subrc > 0.
+              INSERT VALUE #( id = portal_id ty = 'O' co2 = coor2 ) INTO TABLE portals.
+            ENDIF.
           ENDIF.
         ENDIF.
 
@@ -203,26 +265,36 @@ CLASS test_get_item IMPLEMENTATION.
 
 ENDCLASS.
 
-CLASS test_portals_1 DEFINITION FOR TESTING DURATION SHORT RISK LEVEL HARMLESS.
+CLASS test_portals DEFINITION FOR TESTING DURATION SHORT RISK LEVEL HARMLESS.
   PUBLIC SECTION.
     INTERFACES unit_test.
   PRIVATE SECTION.
+    TYPES: BEGIN OF _portal_test,
+             id TYPE solver=>_portal_id,
+           END OF _portal_test,
+           _portals_test TYPE SORTED TABLE OF _portal_test WITH UNIQUE KEY id.
     DATA cut TYPE REF TO solver.
     METHODS setup.
-    METHODS check FOR TESTING.
+    METHODS check_maze_1 FOR TESTING.
+    METHODS check_maze_2 FOR TESTING.
 ENDCLASS.
 
 
-CLASS test_portals_1 IMPLEMENTATION.
+CLASS test_portals IMPLEMENTATION.
   METHOD setup.
     cut = NEW #( ).
-    cut->set_maze( helper=>get_maze( 1 ) ).
   ENDMETHOD.
 
-  METHOD check.
+  METHOD check_maze_1.
 
-    DATA(portals_found) = cut->find_portals( ).
-    DATA(portals_exist) = VALUE solver=>_portals(
+    cut->set_maze( helper=>get_maze( 1 ) ).
+    DATA(portals_found_org) = cut->find_portals( ).
+
+    DATA(portals_found) = VALUE _portals_test(
+                              FOR GROUPS id OF entry IN portals_found_org
+                                  GROUP BY entry-id ( VALUE #( id = id ) ) ).
+
+    DATA(portals_exist) = VALUE _portals_test(
           ( id = 'AA' )
           ( id = 'BC' )
           ( id = 'DE' )
@@ -234,6 +306,36 @@ CLASS test_portals_1 IMPLEMENTATION.
         exp = portals_exist  ).
 
   ENDMETHOD.
+
+  METHOD check_maze_2.
+
+    cut->set_maze( helper=>get_maze( 2 ) ).
+
+    DATA(portals_found) = VALUE _portals_test(
+                              FOR GROUPS id OF entry IN cut->find_portals( )
+                                  GROUP BY entry-id ( VALUE #( id = id ) ) ).
+
+    DATA(portals_exist) = VALUE _portals_test(
+          ( id = 'AA' )
+          ( id = 'AS' )
+          ( id = 'BU' )
+          ( id = 'CP' )
+          ( id = 'DI' )
+          ( id = 'JO' )
+          ( id = 'JP' )
+          ( id = 'LF' )
+          ( id = 'VT' )
+          ( id = 'QG' )
+          ( id = 'YN' )
+          ( id = 'ZZ' )
+         ).
+
+    cl_abap_unit_assert=>assert_equals(
+        act = portals_found
+        exp = portals_exist  ).
+
+  ENDMETHOD.
+
 ENDCLASS.
 
 
